@@ -14,7 +14,7 @@ function expect(x) {
   return {
     toEqual(v) {
       if (!_.isEqual(x, v)) {
-        throw new Error(`${x} noToEqual ${v}`)
+        throw new Error(`${JSON.stringify(x)} noToEqual ${JSON.stringify(v)}`)
       }
     },
     toBe(v) {

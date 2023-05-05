@@ -70,7 +70,9 @@ test("action modifications should be picked up 3", () => {
   const a = mobx.observable.box(1)
   let b = 0
 
-  const doubler = mobx.computed(() => a.get() * 2)
+  const doubler = mobx.computed(() => {
+   return a.get() * 2
+  })
 
   mobx.observe(
       doubler,
@@ -85,7 +87,7 @@ test("action modifications should be picked up 3", () => {
   const action = mobx.action(() => {
       a.set(a.get() + 1) // ha, no loop!
   })
-
+  
   action()
   expect(b).toBe(4)
 
@@ -319,16 +321,128 @@ test("#286 exceptions in actions should not affect global state", () => {
 })
 
 
+test("runInAction", () => {
+  mobx.configure({ enforceActions: "always" })
+  const values = []
+  const events = []
+  const spyDisposer = mobx.spy(ev => {
+      if (ev.type === "action")
+          events.push({
+              name: ev.name,
+              arguments: ev.arguments
+          })
+  })
 
-let topTestCase = true;
+  const observable = mobx.observable.box(0)
+  const d = mobx.autorun(() => values.push(observable.get()))
+
+  let res = mobx.runInAction(() => {
+      observable.set(observable.get() + 6 * 2)
+      observable.set(observable.get() - 3) // oops
+      return 2
+  })
+
+  expect(res).toBe(2)
+  expect(values).toEqual([0, 9])
+
+  res = mobx.runInAction(() => {
+      observable.set(observable.get() + 5 * 2)
+      observable.set(observable.get() - 4) // oops
+      return 3
+  })
+
+  expect(res).toBe(3)
+  expect(values).toEqual([0, 9, 15])
+  expect(events).toEqual([
+      { arguments: [], name: "<unnamed action>" },
+      { arguments: [], name: "<unnamed action>" }
+  ])
+
+  mobx.configure({ enforceActions: "never" })
+  spyDisposer()
+
+  d()
+})
+
+
+test("action in autorun doesn't keep/make computed values alive", () => {
+  let calls = 0
+  const myComputed = mobx.computed(() => {
+    return calls++
+  })
+  const callComputedTwice = () => {
+      myComputed.get()
+      myComputed.get()
+  }
+
+  const runWithMemoizing = fun => {
+      mobx.autorun(fun)()
+  }
+
+  callComputedTwice()
+  expect(calls).toBe(2)
+  runWithMemoizing(callComputedTwice)
+  expect(calls).toBe(3)
+
+  callComputedTwice()
+  expect(calls).toBe(5)
+  runWithMemoizing(function () {
+      mobx.runInAction(callComputedTwice)
+  })
+  expect(calls).toBe(6)
+
+  callComputedTwice()
+  expect(calls).toBe(8)
+})
+
+
+// test("computed values and actions", () => {
+//   let calls = 0
+
+//   const number = mobx.observable.box(1)
+//   const squared = mobx.computed(() => {
+//       calls++
+//       return number.get() * number.get()
+//   })
+//   const changeNumber10Times = mobx.action(() => {
+//       squared.get()
+//       squared.get()
+//       console.log(number.observing.size, _.cloneDeep(number.observing))
+//       for (let i = 0; i < 10; i++){
+//         const v = number.get()
+//         console.log(v, i);
+//         number.set(v + 1)
+//       }
+//   })
+
+//   changeNumber10Times()
+//   console.log('1___changeNumber10Times', calls)
+//   expect(calls).toBe(1)
+
+//   mobx.autorun(() => {
+//       changeNumber10Times()
+//       expect(calls).toBe(2)
+//   })()
+//   expect(calls).toBe(2)
+
+//   changeNumber10Times()
+//   expect(calls).toBe(3)
+// })
+
+
+let topTestCase = false;
 const toggleBtn = document.getElementById('toggleBtn')
 const debuggerBtn = document.getElementById('debuggerBtn');
 function run () {
   mobx._resetGlobalState();
-  list.slice(topTestCase ? -1: 0).map(([name, cb]) => {
-    console.log('-------' + name + '-------')
-    cb()
-  })
+  try{
+    list.slice(topTestCase ? -1: 0).map(([name, cb]) => {
+      console.log('-------' + name + '-------')
+      cb()
+    })
+  }catch(e) {
+    console.error(e)
+  }
   toggleBtn.innerHTML = topTestCase ? '当前最新，点击测试全部' : '当前全部，点击测试最新'
   debuggerBtn.innerHTML = !mobx.globalState.logger ? '当前隐藏，点击展示log' : '当前展示，点击隐藏log'
 }
