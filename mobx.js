@@ -28,6 +28,7 @@ const $REACTION = Symbol('mobx reaction');
 const $COMPUTED_REACTION = Symbol('mobx computed reaction');
 const $COMPUTED_ACTION = Symbol('mobx computed action');
 const $COMPUTED_ATOM = Symbol('mobx computed atom');
+const $COMPUTED_VALUE_IS_NULL = Symbol('mobx computed value is null');
 
 function _resetGlobalState() {
   for (const attr in initGlobalState) {
@@ -86,6 +87,14 @@ class Context {
     this.cbList.add(fn)
   }
 
+  isIn(type) {
+    if (this.type instanceof type) {
+      return true
+    }
+
+    return this.parent && this.parent.isIn(type)
+  }
+
   addAtom(atom) {
     this.containAtom.add(atom)
     this.selfAtom.add(atom)
@@ -96,17 +105,17 @@ class Context {
         if (this.type instanceof Reaction) {
           atom.setIsInActiveReaction(true)
         }
-       
+
         if (this.type instanceof Action) {
           this.runOverAfter(() => {
             // 如果没有被autorun 监听，则当最外层action结束后 
             // this.parent 为 null 则说明是最外层
-            if (!atom.isInActiveReaction  && _.isNil(this.parent)) {
+            if (!atom.isInActiveReaction && _.isNil(this.parent)) {
               atom.updateNeedComputed(true)
             }
           })
         }
-    
+
       }
     }
     if (this.parent) {
@@ -147,7 +156,7 @@ class Atom {
     }
     const oldValue = this.value;
     this.value = v;
-    const reactionList = _.filter([...this.observing], item => (!globalState.isInAction || !(item instanceof ComputedReaction) || item.allowActionChangeComputed));
+    const reactionList = [...this.observing]
     if ((!_.isEqual(oldValue, this.value)) && _.size(reactionList) > 0) {
       startBatch()
       reactionList.forEach(reaction => {
@@ -165,9 +174,9 @@ class Atom {
   get() {
     if (globalState.trackingReaction
       && (((!globalState.isInAction
-        && !globalState.isInComputedAction)) 
+        && !globalState.isInComputedAction))
         // || globalState.isTrackingReactionInAction
-        )
+      )
       && !this.observing.has(globalState.trackingReaction)) {
       this.observing.add(globalState.trackingReaction)
     }
@@ -181,12 +190,12 @@ class Atom {
   }
 }
 
-class ComputedAtom extends Atom{
+class ComputedAtom extends Atom {
   constructor(name, value) {
     super(name, value);
     this.type = $COMPUTED_ATOM;
     this.isInActiveReaction = false;
-    this.isNeedComputed = false;
+    this.isNeedComputed = true;
   }
 
   contextChangeAfter() {
@@ -209,7 +218,7 @@ class ComputedAtom extends Atom{
 class Computed {
   constructor(name, computedFn) {
     this.name = name
-    this.value = new ComputedAtom(name, undefined)
+    this.value = new ComputedAtom(name, $COMPUTED_VALUE_IS_NULL)
     setUnWritableAttr(this, 'type', $COMPUTED);
     this.computedFn = computedFn;
     this.hadAutoRun = false;
@@ -224,9 +233,13 @@ class Computed {
 
   update = computedAction(this.name + '@updateAction', (v) => {
     this.value.setNewValue(v);
-    this.value.updateNeedComputed(true);
+    if (globalState.isInAction || (globalState.trackingContext?.inIn?.(Reaction))) {
+      this.value.updateNeedComputed(false);
+    } else {
+      this.value.updateNeedComputed(true)
+    }
+  
     // this.needComputed = true
-    // console.log('update__', v)
     this.dispatch()
     // console.log('dispatch end')
     this.changeTime++
@@ -246,7 +259,6 @@ class Computed {
 
   autorunView = (text) => function computedWrap() {
     const value = this.computedFn();
-    // console.log(this.lastValue, value, text)
     if (!_.isEqual(this.lastValue, value)) {
       this.lastValue = value
       this.update(value)
@@ -292,6 +304,7 @@ class Computed {
       return this.value.get()
     }
 
+    // console.log(this.value.isInActiveReaction, this.value.isNeedComputed)
     // 如果当前没有被autoRun 监听
     if (!this.value.isInActiveReaction) {
       // 如果不在action 或者autoRun ，runInaction 里获取， 则get一次，重新执行一次计算函数
@@ -299,6 +312,7 @@ class Computed {
         this.actionAutoRunView();
         return this.value.get();
       }
+
       // 如果需要重新计算，则get一次，重新执行一次计算函数
       if (this.value.isNeedComputed) {
         this.actionAutoRunView();
@@ -306,6 +320,7 @@ class Computed {
         return this.value.get();
       }
     }
+
 
     return this.value.get();
   }
@@ -419,14 +434,10 @@ class ComputedReaction {
       globalState.trackingContext.runOver()
       globalState.trackingReaction = preReaction;
       globalState.trackingContext = preContext;
-     
+
     }
 
-    if (preContext instanceof Context) {
-      preContext.runOverAfter(run)
-    } else {
-      run()
-    }
+    run()
   }
 }
 

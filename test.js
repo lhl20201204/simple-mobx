@@ -94,6 +94,9 @@ test("action modifications should be picked up 3", () => {
 
   action()
   expect(b).toBe(6)
+
+  a.set(a.get() + 1)
+  expect(b).toBe(8)
 })
 
 
@@ -499,11 +502,9 @@ test("action in autorun doesn't keep/make computed values alive 2", () => {
   // console.log('前面虽然在autorun里监听了，但是已经dispose了，所以不走缓存')
   expect(calls).toBe(3)
   d()
-  console.log('--1--')
   runWithMemoizing(function () {
       mobx.runInAction(callComputedTwice)
   })()
-  console.log('--2--')
   // console.log('如果在action里第一次不走缓存，后续走缓存');
   expect(calls).toBe(4)
 
@@ -547,7 +548,7 @@ test("action in autorun doesn't keep/make computed values alive 3", () => {
 
   // callComputedTwice()
 
-  // console.log('c', calls)
+  // console.log('c', calls, globalState.isInAction, globalState.trackingReaction)
   myComputed.get()
   expect(calls).toBe(1)
   // console.log('b1')
@@ -586,7 +587,7 @@ test("action in autorun doesn't keep/make computed values alive 3", () => {
     mobx.runInAction(callComputedTwice);
     expect(calls).toBe(3)
     // console.log('d1')
-    console.log('debugger')
+    // console.log('debugger')
    const d2 = mobx.autorun(callComputedTwice)
     expect(calls).toBe(4)
     // console.log('c2');
@@ -636,11 +637,14 @@ test("computed values and actions", () => {
   const number = mobx.observable.box(1)
   const squared = mobx.computed(() => {
       calls++
+      // console.log('computed')
       return number.get() * number.get()
   })
   const changeNumber10Times = mobx.action(() => {
       squared.get()
+      // console.log('run1')
       squared.get()
+      // console.log('run2')
       for (let i = 0; i < 10; i++){
         const v = number.get()
         number.set(v + 1)
@@ -660,6 +664,42 @@ test("computed values and actions", () => {
 
   changeNumber10Times()
   expect(calls).toBe(3)
+})
+
+test('----computed-----', () => {
+  const a = mobx.observable.box(1)
+  const b = mobx.observable.box(2)
+  let calls = 0
+  const c = mobx.computed(() => {
+   return a.get() + b.get()
+  })
+  let ans = []
+  mobx.autorun(() => {
+    const v = c.get()
+    calls++;
+    ans.push(v)
+  })
+
+  expect(calls).toBe(1)
+  expect(ans).toEqual([3])
+
+  // a.set(2)
+  // b.set(2)
+  mobx.runInAction(() => {
+    a.set(2)
+    b.set(6)
+  })
+  expect(calls).toBe(2)
+  expect(ans).toEqual([3, 8])
+  b.set(1)
+  expect(calls).toBe(3)
+  expect(ans).toEqual([3, 8, 3])
+  mobx.runInAction(() => {
+    a.set(1)
+    b.set(2)
+  })
+  expect(calls).toBe(3)
+  expect(ans).toEqual([3, 8, 3])
 })
 
 
