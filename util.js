@@ -22,6 +22,9 @@ function expect(x) {
         throw new Error(`${x} noToBe ${v}`)
       }
     },
+    toBeTruthy() {
+      return Boolean(x)
+    },
     not: {
       toThrow(e) {
         const err = new Error(e)
@@ -38,6 +41,12 @@ Reflect.defineProperty(expect, 'assertions', {
      // todo 不知道干什么用的
   }
 })
+
+function getFuncName(_callee) {
+  var _text = _callee.toString();
+  const m = _text.match(/^function\s*(.*?)\s*\(/)
+  return m ? m[1] : null;
+}
 
 
 function supressConsole(block) {

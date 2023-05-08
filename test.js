@@ -274,30 +274,6 @@ test("action in autorun should be untracked", () => {
 })
 
 
-test("action should not be converted to computed when using (extend)observable", () => {
-  const a = mobx.observable({
-      a: 1,
-      b: mobx.action(function () {
-          this.a++
-      })
-  })
-
-  expect(mobx.isAction(a.b)).toBe(true)
-  a.b()
-  expect(a.a).toBe(2)
-
-  mobx.extendObservable(a, {
-      c: mobx.action(function () {
-          this.a *= 3
-      })
-  })
-
-  expect(mobx.isAction(a.c)).toBe(true)
-  a.c()
-  expect(a.a).toBe(6)
-})
-
-
 test("#286 exceptions in actions should not affect global state", () => {
   let autorunTimes = 0
   function Todos() {
@@ -306,6 +282,7 @@ test("#286 exceptions in actions should not affect global state", () => {
           count: 0,
           add: mobx.action(function () {
               this.count++
+              // console.log(this)
               // console.log(this, this.count);
               if (this.count === 2) {
                   throw new Error("An Action Error!")
@@ -314,18 +291,24 @@ test("#286 exceptions in actions should not affect global state", () => {
       })
   }
   const todo = new Todos()
+  const fn = todo.add;
   mobx.autorun(() => {
       autorunTimes++
       return todo.count
   })
   try {
+      // 将this指向window。
+      fn()
+      expect(window.count).toEqual(NaN)
       todo.add()
       expect(autorunTimes).toBe(2)
       todo.add()
   } catch (e) {
+      // console.error(e)
       expect(autorunTimes).toBe(3)
       todo.add()
       expect(autorunTimes).toBe(4)
+      // console.log('end')
   }
 })
 
@@ -702,6 +685,150 @@ test('----computed-----', () => {
   expect(ans).toEqual([3, 8, 3])
 })
 
+test("action should not be converted to computed when using (extend)observable", () => {
+  const a = mobx.observable({
+      a: 1,
+      b: mobx.action(function () {
+          this.a++
+      }),
+      d: mobx.action.bound(function() {
+        return this;
+      }),
+      e: mobx.action(function() {
+        return this;
+      })
+  })
+
+  expect(mobx.isAction(a.b)).toBe(true)
+  a.b()
+  expect(a.a).toBe(2)
+
+  expect(a.d()).toBe(a)
+  const fn = a.d
+  expect(fn()).toBe(a)
+
+  expect(a.e()).toBe(a)
+  const fn2 = a.e
+  expect(fn2()).toBe(window)
+
+
+  mobx.extendObservable(a, {
+      c: mobx.action(function () {
+          this.a *= 3
+      })
+  })
+
+  expect(mobx.isAction(a.c)).toBe(true)
+  a.c()
+  expect(a.a).toBe(6)
+})
+
+test("extendObservable respects action decorators", () => {
+  const x = mobx.observable(
+      {
+          a1() {
+              return this
+          },
+          a2() {
+              return this
+          },
+          a3() {
+              return this
+          }
+      },
+      {
+          a1: mobx.action,
+          a2: mobx.action.bound,
+          a3: false
+      }
+  )
+
+  expect(mobx.isAction(x.a1)).toBe(true)
+  expect(mobx.isAction(x.a2)).toBe(true)
+  expect(mobx.isAction(x.a3)).toBe(false)
+
+  const global = (function() {
+      return this
+  })()
+
+  const { a1, a2, a3 } = x
+  expect(a1.call(x)).toBe(x)
+  expect(a1()).toBe(global)
+  expect(a2.call(x)).toBeTruthy() // it is not this! proxies :) see test in proxies.js
+  expect(a2()).toBeTruthy()
+  expect(a2()).toBe(x)
+  expect(a3.call(x)).toBe(x)
+  expect(a3()).toBe(global)
+})
+
+test("bound actions bind", () => {
+  let called = 0
+  const x = mobx.observable(
+      {
+          y: 0,
+          z: function (v) {
+              this.y += v
+              this.y += v
+          },
+          get yValue() {
+              // console.log(mobx.globalState.isInComputedMethod)
+              called++
+              return this.y
+          }
+      },
+      {
+          z: mobx.action.bound
+      }
+  )
+
+  // 这里订阅，computed， 
+  const d = mobx.autorun(() => {
+    x.yValue
+  })
+  const events = []
+  const d2 = mobx.spy(e => events.push(e))
+
+  const runner = x.z
+  runner(3)
+  expect(x.yValue).toBe(6)
+  
+  expect(called).toBe(2)
+
+  expect(events.filter(e => e.type === "action").map(e => e.name)).toEqual(["z"])
+  expect(Object.keys(x)).toEqual(["y"])
+
+  d()
+  d2()
+})
+
+test("Fix #1367", () => {
+  const x = mobx.extendObservable(
+      {},
+      {
+          method() {}
+      },
+      {
+          method: mobx.action
+      }
+  )
+  expect(mobx.isAction(x.method)).toBe(true)
+})
+
+test("given actionName, the action function name should be defined as the actionName", () => {
+  const a1 = mobx.action("testAction", () => {})
+  expect(a1.name).toBe("testAction")
+})
+
+test("given anonymous action, the action name should be <unnamed action>", () => {
+  const a1 = mobx.action(() => {})
+  expect(a1.name).toBe("<unnamed action>")
+})
+
+
+test("given function declaration, the action name should be as the function name", () => {
+  const a1 = mobx.action(function testAction() {})
+  expect(a1.name).toBe("testAction")
+})
 
 let topTestCase = false;
 const toggleBtn = document.getElementById('toggleBtn')

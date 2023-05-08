@@ -23,12 +23,15 @@ let globalState = {
 }
 const $MOBX = Symbol('mobx administration');
 const $ACTION = Symbol('mobx action');
+const $ACTION_BOUND = Symbol('mobx action bound');
 const $COMPUTED = Symbol('mobx computed');
 const $REACTION = Symbol('mobx reaction');
 const $COMPUTED_REACTION = Symbol('mobx computed reaction');
 const $COMPUTED_ACTION = Symbol('mobx computed action');
 const $COMPUTED_ATOM = Symbol('mobx computed atom');
 const $COMPUTED_VALUE_IS_NULL = Symbol('mobx computed value is null');
+// const $DESCRIPTOR_COMPUTED_GET = Symbol('mobx desctiptor computed get');
+// const $DESCRIPTOR_COMPUTED_INSTANCE = Symbol('mobx desctiptor computed instance');
 
 function _resetGlobalState() {
   for (const attr in initGlobalState) {
@@ -238,7 +241,7 @@ class Computed {
     } else {
       this.value.updateNeedComputed(true)
     }
-  
+
     // this.needComputed = true
     this.dispatch()
     // console.log('dispatch end')
@@ -444,13 +447,77 @@ class ComputedReaction {
 function getProxy(obj) {
   const ret = new Map();
   for (const x in obj) {
-    ret.set(x, new Atom(x, obj[x]))
+    // if (isComputedGet(obj, x)) {
+
+    //   console.log('是 computed get 属性');
+    //   console.log()
+    //   continue;
+    // }
+
+    const v = obj[x];
+
+    if (v instanceof Computed) {
+      ret.set(x, v)
+      Reflect.deleteProperty(obj, x);
+      Reflect.defineProperty(obj, x, {
+        get() {
+          return v.get()
+        },
+        set(v2) {
+          v.setNewValue(v2)
+          console.warn('computed 属性不能设置', v2)
+        }
+      })
+      continue;
+    }
+
+    if (isAction(v) || isActionBound(v)) {
+      ret.set(x, v)
+      // 代理完之后将其置为不可枚举
+      Reflect.defineProperty(obj, x, {
+        value: v,
+        enumerable: false,
+      })
+      continue;
+    }
+
+
+    ret.set(x, new Atom(x, v))
   }
   return ret;
 }
 
+function setProxyValue(obj, decoratorConfig, attr) {
+  const getFn = Reflect.getOwnPropertyDescriptor(obj, attr)?.get;
+  const willBeWrapComputed = _.isFunction(getFn);
+  const v = willBeWrapComputed ? undefined : obj[attr]
+  if (_.isFunction(_.get(decoratorConfig, attr))) {
+    //  obj[attr] = decoratorConfig[attr](attr, v);
+    Reflect.defineProperty(obj, attr, {
+      value: decoratorConfig[attr](attr, v),
+      // enumerable: false,
+    })
+    return;
+  }
 
-function observable(obj) {
+  if (_.isFunction(getFn)) {
+    Reflect.deleteProperty(obj, attr);
+    // 将其this 绑定死
+    // 给另一个原始obj引用
+    obj[attr] = computed(attr, (...args) => getFn.call(obj[$MOBX].proxy, ...args));
+    return;
+  }
+  obj[attr] = observable(v)
+}
+
+function observable(obj, decoratorConfig) {
+  if (typeof obj !== 'object') {
+    return obj;
+  }
+  for (const x in obj) {
+    setProxyValue(obj, decoratorConfig ?? {}, x)
+  }
+
   const copyObj = { ...obj };
   const proxyObj = {
     values: getProxy(obj),
@@ -467,8 +534,14 @@ function observable(obj) {
       if (observableValue instanceof Atom) {
         observableValue.setNewValue(newValue);
       }
-      Reflect.set(target, p, newValue);
-      Reflect.set(copyObj, p, newValue);
+      if (copyObj[p] instanceof Computed) {
+        Reflect.set(target, p, newValue);
+        // todo 如果原来是computed,后续需要重新考虑
+        copyObj[p].value = newValue;
+      } else {
+        Reflect.set(target, p, newValue);
+        Reflect.set(copyObj, p, newValue);
+      }
       globalState.logger && console.log('atom-set', p, newValue);
       return true;
     },
@@ -480,7 +553,16 @@ function observable(obj) {
       }
 
       if (_.isFunction(value)) {
-        const ret = value.bind(proxyInstance);
+
+        function ret(...args) {
+
+          const callObj = isActionBound(value) ? proxyInstance :
+            Reflect.has(this, $MOBX) ? this[$MOBX].proxy : this;
+          // console.log('value', value, this, target, this === obj,  this === target)
+          // console.log((isActionBound(value)) ||  Reflect.has(this, $MOBX))
+          return value.call(callObj, ...args)
+        }
+
         [$ACTION, $COMPUTED_ACTION].forEach(attr => {
           if (value[attr]) {
             setUnWritableAttr(ret, attr, value[attr])
@@ -488,6 +570,11 @@ function observable(obj) {
         })
         return ret
       }
+
+      if (value instanceof Computed) {
+        return value.get()
+      }
+
       globalState.logger && console.log('atom-get', p, value)
       return [$MOBX].includes(p) ? proxyObj : value
     },
@@ -499,7 +586,7 @@ function observable(obj) {
       return true
     }
   })
-
+  proxyObj.proxy = proxyInstance
   return proxyInstance;
 }
 
@@ -563,15 +650,24 @@ class Action {
       }
     }
     setUnWritableAttr(actionWrap, $ACTION, true)
+    setUnWritableAttr(actionWrap, 'name', name)
     return actionWrap
   }
 }
 
 function action(name, view) {
   const cb = view ?? name
-  name = view ? name : '<unnamed action>'
+  name = view ? name : (getFuncName(cb) ?? '<unnamed action>')
   return new Action().getActionWrap(name, cb)
 }
+
+setUnWritableAttr(action, 'bound', function (name, view) {
+  const cb = view ?? name
+  name = view ? name : '<unnamed action.bound>'
+  const ret = action(name, cb)
+  setUnWritableAttr(ret, $ACTION_BOUND, true)
+  return ret
+})
 
 function computedAction(name, view) {
   const cb = view || name
@@ -588,8 +684,10 @@ function computedAction(name, view) {
   return fn
 }
 
-function computed(view) {
-  return new Computed('computed@' + globalState.computedId++, () => {
+function computed(name, view) {
+  view = view ? view : name;
+  name = view ? name : 'computed@' + globalState.computedId++
+  return new Computed(name, () => {
     const preIsInComputedMethod = globalState.isInComputedMethod
     globalState.isInComputedMethod = true;
     const value = view()
@@ -613,15 +711,44 @@ function isAction(fn) {
   return fn[$ACTION] ?? fn[$COMPUTED_ACTION] ?? false
 }
 
-function extendObservable(originObj, extObj) {
+function isActionBound(fn) {
+  return fn[$ACTION_BOUND] ?? false
+}
+
+function isComputedGet(obj, attr) {
+  if (!_.isObject(obj)) {
+    return false
+  }
+  console.log(obj, attr, Reflect.getOwnPropertyDescriptor(obj, attr))
+  return Boolean(Reflect.getOwnPropertyDescriptor(obj, attr)?.[$DESCRIPTOR_COMPUTED_GET]);
+}
+
+function getComputedInstance(obj, attr) {
+  if (!isComputedGet(obj, attr)) {
+    return null
+  }
+  return Reflect.getOwnPropertyDescriptor(obj, attr)?.[$DESCRIPTOR_COMPUTED_INSTANCE]
+}
+
+function extendObservable(originObj, extObj, decoratorConfig) {
+  for (const x in extObj) {
+    setProxyValue(extObj, decoratorConfig ?? {}, x)
+  }
+
   let originProxyInstance = originObj;
-  if (!Reflect.has(originObj, $MOBX)) {
+  const hadMoxProxy = Reflect.has(originObj, $MOBX)
+  if (!hadMoxProxy) {
     originProxyInstance = observable({})
     for (const attr in originObj) {
       originProxyInstance[attr] = originObj[attr]
     }
   }
   const proxyObj = Reflect.get(originProxyInstance, $MOBX);
+
+  if (!hadMoxProxy) {
+    setUnWritableAttr(originObj, $MOBX, proxyObj);
+  }
+
   for (const attr in extObj) {
     const atom = new Atom(attr, extObj[attr])
     proxyObj.values.set(attr, atom)
@@ -640,6 +767,7 @@ function extendObservable(originObj, extObj) {
       }
     })
   }
+  return originObj
 }
 
 function configure(config) {
