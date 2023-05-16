@@ -618,9 +618,10 @@ test("computed values and actions", () => {
   let calls = 0
 
   const number = mobx.observable.box(1)
-  const squared = mobx.computed(() => {
+  // console.log(number.name);
+  const squared = mobx.computed('mytest computed', () => {
       calls++
-      // console.log('computed')
+      // console.log('computed', calls);
       return number.get() * number.get()
   })
   const changeNumber10Times = mobx.action(() => {
@@ -636,11 +637,9 @@ test("computed values and actions", () => {
 
   changeNumber10Times()
   expect(calls).toBe(1)
-
   mobx.autorun(() => {
 
       changeNumber10Times()
-
       expect(calls).toBe(2)
   })()
   expect(calls).toBe(2)
@@ -829,6 +828,567 @@ test("given function declaration, the action name should be as the function name
   const a1 = mobx.action(function testAction() {})
   expect(a1.name).toBe("testAction")
 })
+
+test("test object", function () {
+  let a = mobx.observable({
+     b: {
+       c: 1
+     }
+  })
+  let q = a.b;
+  const arr = []
+  let calls1 = 0;
+  let calls2 = 0;
+  mobx.autorun(()=> {
+    calls1++
+    arr.push(a.b)
+  })
+ 
+  mobx.autorun(()=> {
+    calls2++
+    arr.push(a.b.c)
+  })
+ 
+
+  mobx.runInAction(()=> {
+   a.b.c +=1;
+  })
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.push('start')
+  mobx.runInAction(()=> {
+   a.b.c = 2;
+  })
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.push('end')
+  mobx.runInAction(()=> {
+   a.b = 2;
+  })
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(3)
+  mobx.runInAction(()=> {
+   a.b = q;
+  })
+
+  mobx.runInAction(()=> {
+   a.b.c = 4;
+  })
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(5)
+  expect(arr[0]).toBe(q)
+  expect(arr.slice(1)).toEqual([ 1, 2, 'start', 'end', 2, undefined, q, 2, 4 ])
+  mobx.runInAction(()=> {
+    a.b = { c: 2 };
+    q.c = 5
+    a.b = q;
+  })
+  expect(calls1).toBe(4)
+  expect(calls2).toBe(6)
+  expect(arr[0]).toBe(q)
+  expect(arr.slice(1)).toEqual([ 1, 2, 'start', 'end', 2, undefined, q, 2, 4, q, 5 ])
+  
+ })
+
+ test("test object2", function () {
+  let a = mobx.observable({
+     b: {
+       c: 1
+     }
+  })
+  let q = a.b;
+  const arr = []
+  let calls1 = 0;
+  let calls2 = 0;
+  mobx.autorun(()=> {
+    calls1++
+    arr.push(a.b)
+  })
+ 
+  mobx.autorun(()=> {
+    calls2++
+    arr.push(a.b.c)
+  })
+ 
+
+  mobx.runInAction(()=> {
+   a.b.c +=1;
+  })
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.push('start')
+  mobx.runInAction(()=> {
+   a.b.c = 2;
+  })
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.push('end')
+  mobx.runInAction(()=> {
+   a.b = 2;
+  })
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(3)
+  mobx.runInAction(()=> {
+   a.b = q;
+  })
+
+  mobx.runInAction(()=> {
+   a.b.c = 4;
+  })
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(5)
+  expect(arr[0]).toBe(q)
+  expect(arr.slice(1)).toEqual([ 1, 2, 'start', 'end', 2, undefined, q, 2, 4 ])
+  mobx.runInAction(()=> {
+    let ttt = a.b
+    ttt.c = 2
+    a.b = ttt;
+  })
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(6)
+  expect(arr[0]).toBe(q)
+  expect(arr.slice(1)).toEqual([ 1, 2, 'start', 'end', 2, undefined, q, 2, 4, 2 ])
+  
+ })
+
+
+ test("test computed wrap", () => {
+  let calls1 = 0;
+  let calls2 = 0;
+  const a = mobx.observable.box(1)
+  // console.log(a.name)
+  const b = mobx.observable.box(2)
+
+  const c = mobx.computed('-C-', () => {
+    arr.push([a.get(), b.get()])
+    // console.log('c computed',)
+    calls1++;
+    return a.get() + b.get()
+  });
+
+  const d = mobx.computed('-D-',() => {
+    arr.push('d')
+    // console.log('d computed', _.cloneDeep(d))
+    const ret = c.get()
+    // console.log('d computed', _.cloneDeep(d))
+    arr.push('c')
+    // console.log('c in d')
+    calls2++;
+    arr.push(c.get())
+    // console.log('arr push')
+    return  ret + a.get()
+  })
+
+  const arr = []
+  mobx.autorun(() => {
+    // console.log('d autorun')
+    arr.push(['d', d.get()])
+    // console.log('d autorun end', _.cloneDeep(d))
+  })
+  
+  expect(arr).toEqual(['d',[1,2], 'c', 3, ['d', 4]])
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(1)
+  // console.log('-----start-----')
+  mobx.runInAction(() => {
+    b.set(3)
+  })
+
+  expect(arr).toEqual(['d',[1,2], 'c', 3, ['d', 4],
+   [1,3], 'd', 'c', 4, ['d', 5]])
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(2)
+
+  // console.log('---------------1111111111111---------------------------')
+  mobx.runInAction(() => {
+    a.set(7)
+  })
+  // console.log(c, d)
+  // console.log(arr);
+  // 预期 'd', [7, 3], 'c', 10, ['d',17]
+  // 当前 [7,3],"d","c",10,["d",17],"d","c",10] 
+  expect(arr).toEqual(['d',[1,2], 'c', 3, ['d', 4], [1,3], 'd', 'c', 4, ['d', 5],
+   'd', [7, 3], 'c', 10, ['d',17]])
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(3)
+})
+
+test("test computed wrap2", () => {
+  let calls1 = 0;
+  let calls2 = 0;
+  const a = mobx.observable.box(1)
+  const b = mobx.observable.box(2)
+  const c = mobx.computed(() => {
+    // console.log('c computed')
+    arr.push([a.get(), b.get()])
+    calls1++;
+    return a.get() + b.get()
+  })
+  const d = mobx.computed(() => {
+    // console.log('d computed')
+    const rest = a.get();
+    arr.push('d')
+    // console.log('c.get before')
+    const ret = c.get()
+    // console.log('c.get after')
+    arr.push('c')
+    calls2++;
+    arr.push(c.get())
+    return  ret + rest;
+  })
+  const arr = []
+  mobx.autorun(() => {
+    // console.log('c autorun')
+    c.get()
+  })
+  mobx.autorun(() => {
+    arr.push(['d', d.get()])
+  })
+
+  expect(arr).toEqual([[1,2],"d","c",3,["d",4]])
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(1)
+  // console.log('debugger1')
+  mobx.runInAction(() => {
+    b.set(3)
+  })
+
+  expect(arr).toEqual([[1,2],"d","c",3,["d",4],
+  [1,3],"d","c",4,["d",5]])
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(2)
+  // console.log('debugger2')
+  mobx.runInAction(() => {
+    a.set(7)
+  })
+  expect(arr).toEqual([[1,2],"d","c",3,["d",4],[1,3],"d","c",4,["d",5],
+  [7,3],"d","c",10,["d",17]]
+  )
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(3)
+ 
+})
+
+test("test computed wrap5", () => {
+  let calls1 = 0;
+  let calls2 = 0;
+  const a = mobx.observable.box(1)
+  const b = mobx.observable.box(2)
+  const c = mobx.computed(() => {
+    // console.log('c computed')
+    arr.push('c computed')
+    arr.push([a.get(), b.get()])
+    calls1++;
+    return a.get() + b.get()
+  })
+  const d = mobx.computed(() => {
+    // console.log('d computed')
+    const rest = a.get();
+    arr.push('d')
+    // console.log('c.get before')
+    const ret = c.get()
+    // console.log('c.get after')
+    arr.push('c')
+    calls2++;
+    arr.push(c.get())
+    return  ret + rest;
+  })
+  const arr = []
+  mobx.autorun(() => {
+    // console.log('c autorun')
+    arr.push('c autorun')
+    c.get()
+    b.get()
+  })
+  mobx.autorun(() => {
+    arr.push(['d', d.get()])
+  })
+
+  expect(arr).toEqual(["c autorun","c computed",[1,2],"d","c",3,["d",4]])
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(1)
+  // console.log('debugger1')
+  // console.log(_.cloneDeep(c))
+  mobx.runInAction(() => {
+    b.set(3)
+  })
+  // console.log(_.cloneDeep(c))
+  expect(arr).toEqual(["c autorun","c computed",[1,2],"d","c",3,["d",4],"c autorun","c computed",[1,3],"d","c",4,["d",5]])
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(2)
+  // console.log('debugger2')
+  mobx.runInAction(() => {
+    a.set(7)
+  })
+  expect(arr).toEqual(["c autorun","c computed",[1,2],"d","c",3,["d",4],"c autorun","c computed",[1,3],"d","c",4,["d",5],
+  "c computed",[7,3],"c autorun","d","c",10,["d",17]]
+  )
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(3)
+ 
+})
+
+
+test("test computed wrap3", () => {
+  let calls1 = 0;
+  let calls2 = 0;
+  const a = mobx.observable.box(1)
+  const b = mobx.observable.box(2)
+  const c = mobx.computed(() => {
+    // console.log('c computed')
+    arr.push([a.get(), b.get()])
+    calls1++;
+    return a.get() + b.get()
+  })
+  const d = mobx.computed(() => {
+    // console.log('d computed')
+    const rest = a.get();
+    arr.push('d')
+    // console.log('c.get before')
+    const ret = c.get()
+    // console.log('c.get after')
+    arr.push('c')
+    calls2++;
+    arr.push(c.get())
+    return  ret + rest;
+  })
+  const arr = []
+  c.get()
+  mobx.autorun(() => {
+    arr.push(['d', d.get()])
+  })
+
+  expect(arr).toEqual([[1,2],"d",[1,2],"c",3,["d",4]])
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(1)
+  // console.log('debugger1')
+  mobx.runInAction(() => {
+    b.set(3)
+  })
+
+  expect(arr).toEqual([[1,2],"d",[1,2],"c",3,["d",4],
+  [1,3],"d","c",4,["d",5]])
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(2)
+  // console.log('debugger2')
+  mobx.runInAction(() => {
+    a.set(7)
+  })
+  expect(arr).toEqual([[1,2],"d",[1,2],"c",3,["d",4],[1,3],"d","c",4,["d",5],
+  "d",[7,3],"c",10,["d",17]]
+  )
+  expect(calls1).toBe(4)
+  expect(calls2).toBe(3)
+ 
+})
+
+
+test("test computed wrap4", () => {
+  let calls1 = 0;
+  let calls2 = 0;
+  const a = mobx.observable.box(1)
+  const b = mobx.observable.box(2)
+  const arr = []
+
+  // mobx.spy((e) => {
+  //   console.log(e);
+  // });
+  const f = mobx.observable.box(12)
+
+  const c = mobx.computed(() => {
+    // console.log('c computed')
+    arr.push(['c computed', a.get(), b.get()])
+    calls1++;
+    return a.get() + b.get()
+  })
+
+  const h = mobx.computed(() => {
+    // console.log('h computed')
+    arr.push('h computed')
+    return f.get() + b.get()
+  })
+
+
+  const d = mobx.computed(() => {
+    // console.log('d computed')
+    const rest = a.get();
+    arr.push('d')
+    const ret1 = h.get()
+    const ret = c.get()
+    arr.push('c')
+    calls2++;
+    arr.push(c.get())
+    // console.log('d computed return')
+    return  ret + rest + ret1;
+  })
+
+
+  const g = mobx.action(() => {
+    f.set(24)
+  })
+  // a1 b2 c3 d5 f6 h7
+  // console.log('start', a.name_, b.name_, c.name_, d.name_, f.name_, h.name_)
+  // c.get()
+  // h.get()
+  // console.log('debugger0')
+
+
+  mobx.autorun(() => {
+    // console.log('7 start')
+    arr.push(['d', d.get()])
+    // console.log('run g')
+    g('这是g')
+    // console.log('7 end')
+  })
+  expect(arr).toEqual(["d","h computed",["c computed",1,2],"c",3,["d",18],"h computed","d","c",3,["d",30]])
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.splice(0, arr.length)
+  mobx.autorun(() => {
+    // console.log('3 start')
+    arr.push(['c autorun', c.get()])
+    // console.log('3 end')
+  })
+  expect(arr).toEqual([["c autorun",3]])
+  expect(calls1).toBe(1)
+  expect(calls2).toBe(2)
+  arr.splice(0, arr.length)
+  // console.log('debugger1')
+  mobx.runInAction(() => {
+    b.set(3)
+  })
+  expect(arr).toEqual(["h computed","d",["c computed",1,3],"c",4,["d",32],["c autorun",4]])
+  expect(calls1).toBe(2)
+  expect(calls2).toBe(3)
+  arr.splice(0, arr.length)
+// h ->c
+
+//  c -> a, b
+//  d -> a, c, h
+//  h -> f, b
+
+  // console.log('debugger2')
+  mobx.runInAction(() => {
+    a.set(7)
+  })
+  expect(arr).toEqual(["d",["c computed",7,3],"c",10,["d",44],["c autorun",10]])
+  expect(calls1).toBe(3)
+  expect(calls2).toBe(4)
+})
+
+ 
+
+// test("test array1", function () {
+//   const a = observable.array([])
+//   expect(a.length).toBe(0)
+//   expect(Object.keys(a)).toEqual([])
+//   expect(a.slice()).toEqual([])
+  
+//   a.push(1)
+//   expect(a.length).toBe(1)
+//   expect(a.slice()).toEqual([1])
+
+//   a[1] = 2
+//   expect(a.length).toBe(2)
+//   expect(a.slice()).toEqual([1, 2])
+
+//   const sum = mobx.computed(function () {
+//       return (
+//           -1 +
+//           a.reduce(function (a, b) {
+//               return a + b
+//           }, 1)
+//       )
+//   })
+
+//   expect(sum.get()).toBe(3)
+
+//   a[1] = 3
+//   expect(a.length).toBe(2)
+//   expect(a.slice()).toEqual([1, 3])
+//   expect(sum.get()).toBe(4)
+
+//   a.splice(1, 1, 4, 5)
+//   expect(a.length).toBe(3)
+//   expect(a.slice()).toEqual([1, 4, 5])
+//   expect(sum.get()).toBe(10)
+  
+//   a.replace([2, 4])
+//   expect(sum.get()).toBe(6)
+
+//   a.splice(1, 1)
+//   expect(sum.get()).toBe(2)
+//   expect(a.slice()).toEqual([2])
+
+//   a.spliceWithArray(0, 0, [4, 3])
+//   expect(sum.get()).toBe(9)
+//   expect(a.slice()).toEqual([4, 3, 2])
+
+//   a.clear()
+//   expect(sum.get()).toBe(0)
+//   expect(a.slice()).toEqual([])
+
+//   a.length = 4
+//   expect(_.isNaN(sum.get())).toBe(true)
+//   expect(a.length).toEqual(4)
+
+//   expect(a.slice()).toEqual([undefined, undefined, undefined, undefined])
+
+//   a.replace([1, 2, 2, 4])
+//   expect(sum.get()).toBe(9)
+//   a.length = 4
+//   expect(sum.get()).toBe(9)
+
+//   a.length = 2
+//   expect(sum.get()).toBe(3)
+//   expect(a.slice()).toEqual([1, 2])
+
+//   expect(a.reverse()).toEqual([2, 1])
+//   expect(a).toEqual([2, 1])
+//   expect(a.slice()).toEqual([2, 1])
+
+//   a.unshift(3)
+//   expect(a.sort()).toEqual([1, 2, 3])
+//   expect(a).toEqual([1, 2, 3])
+//   expect(a.slice()).toEqual([1, 2, 3])
+
+//   expect(JSON.stringify(a)).toBe("[1,2,3]")
+
+//   expect(a[1]).toBe(2)
+//   a[2] = 4
+//   expect(a[2]).toBe(4)
+
+//   expect(Object.keys(a)).toEqual(["0", "1", "2"])
+// })
+
+// test("test array2", function () {
+//   let a = mobx.observable.array([{a: 1, b: 2 }, 3])
+//   console.log(a)
+//   mobx.autorun(()=> {
+//    a[0]?.a;
+//      console.log('change1')
+//   })
+ 
+//   mobx.autorun(()=> {
+//    a[1];
+//      console.log('change2')
+//   })
+ 
+//   mobx.autorun(()=> {
+//    a;
+//      console.log('change3')
+//   })
+ 
+//   mobx.runInAction(()=> {
+//    a.push(4)
+//   })
+ 
+//   mobx.runInAction(()=> {
+//    a.splice(0, 3)
+//   })
+  
+//  })
+ 
 
 let topTestCase = false;
 const toggleBtn = document.getElementById('toggleBtn')
