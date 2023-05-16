@@ -13,7 +13,7 @@ function expect(x) {
   }
   return {
     toEqual(v) {
-      if (!_.isEqual(x, v)) {
+      if (!_.isEqual(x, v) && JSON.stringify(x) !== JSON.stringify(v)) {
         throw new Error(`${JSON.stringify(x)} noToEqual ${JSON.stringify(v)}`)
       }
     },

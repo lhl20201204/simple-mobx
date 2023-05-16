@@ -3,7 +3,6 @@ const initGlobalState = {
   trackingContext: null,
   trackingReaction: null,
   trackingComputed: null,
-  // isTrackingReactionInAction: false,
   enforceActions: false,
   penddingReaction: new Set(),
   runningReaction: new Set(),
@@ -35,8 +34,7 @@ const $COMPUTED_REACTION = Symbol('mobx computed reaction');
 const $COMPUTED_ACTION = Symbol('mobx computed action');
 const $COMPUTED_ATOM = Symbol('mobx computed atom');
 const $COMPUTED_VALUE_IS_NULL = Symbol('mobx computed value is null');
-// const $DESCRIPTOR_COMPUTED_GET = Symbol('mobx desctiptor computed get');
-// const $DESCRIPTOR_COMPUTED_INSTANCE = Symbol('mobx desctiptor computed instance');
+const $ARRAY_EXTRA = Symbol('mobx arr extra');
 
 function setUnWritableAttr(obj, attr, value) {
   Reflect.defineProperty(obj, attr, {
@@ -55,6 +53,9 @@ for (const x of Reflect.ownKeys(originArrProto)) {
   originArrProto[x] = function (...args) {
     if (Reflect.has(this, $MOBX)) {
       const proxy = this[$MOBX].proxy;
+      if (globalState.trackingReaction) {
+        proxy[$ARRAY_EXTRA];
+      }
       return runInAction(() => {
         return fn.call(proxy, ...args)
       })
@@ -283,7 +284,9 @@ class Atom {
         globalState.penddingReaction.add(reaction)
       })
       endBatch()
+      return true;
     }
+    return false;
   }
 
   set(v) {
@@ -710,7 +713,13 @@ class ComputedReaction {
 
 function getProxy(obj) {
   const ret = new Map();
+  if (_.isArray(obj)) {
+    let len = _.size(obj);
+    // ret.set('length', new Atom('observable@length', len))
+    ret.set($ARRAY_EXTRA, new Atom('observableArray@extra', 0))
+  }
   for (const x in obj) {
+    // console.log(x, '初始化');
     // if (isComputedGet(obj, x)) {
 
     //   console.log('是 computed get 属性');
@@ -797,9 +806,9 @@ function observable(obj, decoratorConfig) {
 
   setUnWritableAttr(obj, $MOBX, proxyObj)
 
-  const proxyInstance = new Proxy(obj[$MOBX].originObj, {
+  const proxyInstance = new Proxy(proxyObj.originObj, {
     set(target, p, t) {
-      const observableValue = target[$MOBX].values.get(p)
+      const observableValue = proxyObj.values.get(p)
       newValue = observable(t);
       if (observableValue instanceof Atom) {
         observableValue.setNewValue(newValue);
@@ -812,11 +821,11 @@ function observable(obj, decoratorConfig) {
         Reflect.set(target, p, newValue);
         Reflect.set(copyObj, p, newValue);
       }
-      globalState.logger && console.log('atom-set', p, newValue);
+      globalState.logger && console.log('obj-atom-set', p, newValue);
       return true;
     },
     get(target, p) {
-      const v = target[$MOBX].values.get(p)
+      const v = proxyObj.values.get(p)
       let value = Reflect.get(copyObj, p);
       if (v instanceof Atom) {
         value = v.get()
@@ -845,7 +854,7 @@ function observable(obj, decoratorConfig) {
         return value.get()
       }
 
-      globalState.logger && console.log('atom-get', p, value)
+      globalState.logger && console.log('obj-atom-get', p, value)
       return [$MOBX].includes(p) ? proxyObj : value
     },
     has(target, p) {
@@ -880,12 +889,12 @@ function observableArray(arr, decoratorConfig) {
 
   setUnWritableAttr(arr, $MOBX, proxyObj)
 
-  const proxyInstance = new Proxy(arr[$MOBX].originObj, {
+  let array_extra_id = 0;
+  let array_len = copyObj.length;
+  const proxyInstance = new Proxy(proxyObj.originObj, {
     set(target, p, newValue) {
-      const observableValue = target[$MOBX].values.get(p)
-      if (observableValue instanceof Atom) {
-        observableValue.setNewValue(newValue);
-      }
+      let oldLen = copyObj['length'];
+      let len = null;
       if (copyObj[p] instanceof Computed) {
         // Reflect.set(target, p, newValue);
         // todo 如果原来是computed,后续需要重新考虑
@@ -893,15 +902,48 @@ function observableArray(arr, decoratorConfig) {
       } else {
         Reflect.set(target, p, newValue);
         Reflect.set(copyObj, p, newValue);
+        if ((_.isString(p) && _.isInteger(+p)) || p === 'length') {
+          len = copyObj['length']
+          Reflect.set(target, 'length', len);
+          Reflect.set(copyObj, 'length', len);
+          if (oldLen !== len) {
+            proxyObj.proxy['length'] = len;
+          }
+        }
       }
-      globalState.logger && console.log('atom-set', p, newValue);
+      const observableAtom = proxyObj.values.get(p)
+
+      const isShouldUpdate = (!_.isNull(len) && oldLen !== len) || observableAtom?.value !== newValue;
+      if (observableAtom instanceof Atom) {
+        if (isShouldUpdate) {
+          const extraAtom = proxyObj.values.get($ARRAY_EXTRA)
+          if (extraAtom instanceof Atom) {
+            runInAction(() => {
+              observableAtom.setNewValue(newValue)
+              extraAtom.setNewValue(array_extra_id++)
+            })
+          }
+        } else {
+          observableAtom.setNewValue(newValue)
+        }
+      } else if (p === 'length' && isShouldUpdate) {
+        const extraAtom = proxyObj.values.get($ARRAY_EXTRA)
+        extraAtom.setNewValue(array_extra_id++)
+      }
+      globalState.logger && console.log('arr-atom-set', p, newValue);
       return true;
     },
     get(target, p) {
-      const v = target[$MOBX].values.get(p)
+      const v = proxyObj.values.get(p)
       let value = Reflect.get(copyObj, p);
       if (v instanceof Atom) {
         value = v.get()
+      }
+
+      if (_.isString(p) && _.isInteger(+p) && globalState.trackingReaction) {
+        const extraAtom = proxyObj.values.get($ARRAY_EXTRA)
+        extraAtom.get()
+        // console.log('额外监听', p)
       }
 
       if (_.isFunction(value)) {
@@ -924,10 +966,11 @@ function observableArray(arr, decoratorConfig) {
       }
 
       if (value instanceof Computed) {
+        // 二次代理
         return value.get()
       }
 
-      globalState.logger && console.log('atom-get', p, value)
+      globalState.logger && console.log('arr-atom-get', p, value)
       return [$MOBX].includes(p) ? proxyObj : value
     },
     has(target, p) {
@@ -980,9 +1023,7 @@ class Action {
       globalState.trackingContext = newContext;
       const preIsInAction = globalState.isInAction
       try { // 解决测试用例 #286 exceptions in actions should not affect global state
-        if (!globalState.trackingReaction) {
-          startBatch()
-        }
+        startBatch()
         globalState.isInAction = true
         if (globalState.isSpying) {
           globalState.spyList.forEach((spyCb) => {
@@ -1000,9 +1041,7 @@ class Action {
         globalState.trackingContext.runOver()
         globalState.trackingContext = preContext;
         globalState.isInAction = preIsInAction
-        if (!globalState.trackingReaction) {
-          endBatch()
-        }
+        endBatch()
         if (error) {
           throw error
         }
@@ -1074,21 +1113,6 @@ function isAction(fn) {
 function isActionBound(fn) {
   return fn[$ACTION_BOUND] ?? false
 }
-
-// function isComputedGet(obj, attr) {
-//   if (!_.isObject(obj)) {
-//     return false
-//   }
-//   console.log(obj, attr, Reflect.getOwnPropertyDescriptor(obj, attr))
-//   return Boolean(Reflect.getOwnPropertyDescriptor(obj, attr)?.[$DESCRIPTOR_COMPUTED_GET]);
-// }
-
-// function getComputedInstance(obj, attr) {
-//   if (!isComputedGet(obj, attr)) {
-//     return null
-//   }
-//   return Reflect.getOwnPropertyDescriptor(obj, attr)?.[$DESCRIPTOR_COMPUTED_INSTANCE]
-// }
 
 function extendObservable(originObj, extObj, decoratorConfig) {
   for (const x in extObj) {

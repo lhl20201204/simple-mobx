@@ -1278,116 +1278,241 @@ test("test computed wrap4", () => {
 
  
 
-// test("test array1", function () {
-//   const a = observable.array([])
-//   expect(a.length).toBe(0)
-//   expect(Object.keys(a)).toEqual([])
-//   expect(a.slice()).toEqual([])
+test("test array1", function () {
+  const a = observable.array([])
+  expect(a.length).toBe(0)
+  expect(Object.keys(a)).toEqual([])
+  expect(a.slice()).toEqual([])
   
-//   a.push(1)
-//   expect(a.length).toBe(1)
-//   expect(a.slice()).toEqual([1])
+  a.push(1)
+  expect(a.length).toBe(1)
+  expect(a.slice()).toEqual([1])
 
-//   a[1] = 2
-//   expect(a.length).toBe(2)
-//   expect(a.slice()).toEqual([1, 2])
+  a[1] = 2
 
-//   const sum = mobx.computed(function () {
-//       return (
-//           -1 +
-//           a.reduce(function (a, b) {
-//               return a + b
-//           }, 1)
-//       )
-//   })
+  expect(a.length).toBe(2)
+  expect(a.slice()).toEqual([1, 2])
 
-//   expect(sum.get()).toBe(3)
+  const sum = mobx.computed(function () {
+      return (
+          -1 +
+          a.reduce(function (a, b) {
+              return a + b
+          }, 1)
+      )
+  })
 
-//   a[1] = 3
-//   expect(a.length).toBe(2)
-//   expect(a.slice()).toEqual([1, 3])
-//   expect(sum.get()).toBe(4)
+  expect(sum.get()).toBe(3)
 
-//   a.splice(1, 1, 4, 5)
-//   expect(a.length).toBe(3)
-//   expect(a.slice()).toEqual([1, 4, 5])
-//   expect(sum.get()).toBe(10)
+  a[1] = 3
+  expect(a.length).toBe(2)
+  expect(a.slice()).toEqual([1, 3])
+  expect(sum.get()).toBe(4)
+
+  a.splice(1, 1, 4, 5)
+  expect(a.length).toBe(3)
+  expect(a.slice()).toEqual([1, 4, 5])
+  expect(sum.get()).toBe(10)
   
-//   a.replace([2, 4])
-//   expect(sum.get()).toBe(6)
+  a.replace([2, 4])
+  expect(sum.get()).toBe(6)
 
-//   a.splice(1, 1)
-//   expect(sum.get()).toBe(2)
-//   expect(a.slice()).toEqual([2])
+  a.splice(1, 1)
+  expect(sum.get()).toBe(2)
+  expect(a.slice()).toEqual([2])
 
-//   a.spliceWithArray(0, 0, [4, 3])
-//   expect(sum.get()).toBe(9)
-//   expect(a.slice()).toEqual([4, 3, 2])
+  a.spliceWithArray(0, 0, [4, 3])
+  expect(sum.get()).toBe(9)
+  expect(a.slice()).toEqual([4, 3, 2])
 
-//   a.clear()
-//   expect(sum.get()).toBe(0)
-//   expect(a.slice()).toEqual([])
+  a.clear()
+  expect(sum.get()).toBe(0)
+  expect(a.slice()).toEqual([])
 
-//   a.length = 4
-//   expect(_.isNaN(sum.get())).toBe(true)
-//   expect(a.length).toEqual(4)
+  a.length = 4
+  expect(_.isNaN(sum.get())).toBe(true)
+  expect(a.length).toEqual(4)
 
-//   expect(a.slice()).toEqual([undefined, undefined, undefined, undefined])
+  expect(a.slice()).toEqual([undefined, undefined, undefined, undefined])
 
-//   a.replace([1, 2, 2, 4])
-//   expect(sum.get()).toBe(9)
-//   a.length = 4
-//   expect(sum.get()).toBe(9)
+  a.replace([1, 2, 2, 4])
+  expect(sum.get()).toBe(9)
+  a.length = 4
+  expect(sum.get()).toBe(9)
 
-//   a.length = 2
-//   expect(sum.get()).toBe(3)
-//   expect(a.slice()).toEqual([1, 2])
+  a.length = 2
+  expect(sum.get()).toBe(3)
+  expect(a.slice()).toEqual([1, 2])
 
-//   expect(a.reverse()).toEqual([2, 1])
-//   expect(a).toEqual([2, 1])
-//   expect(a.slice()).toEqual([2, 1])
+  expect(a.reverse()).toEqual([2, 1])
+  expect(a).toEqual([2, 1])
+  expect(a.slice()).toEqual([2, 1])
 
-//   a.unshift(3)
-//   expect(a.sort()).toEqual([1, 2, 3])
-//   expect(a).toEqual([1, 2, 3])
-//   expect(a.slice()).toEqual([1, 2, 3])
+  a.unshift(3)
+  expect(a.sort()).toEqual([1, 2, 3])
+  expect(a).toEqual([1, 2, 3])
+  expect(a.slice()).toEqual([1, 2, 3])
 
-//   expect(JSON.stringify(a)).toBe("[1,2,3]")
+  expect(JSON.stringify(a)).toBe("[1,2,3]")
 
-//   expect(a[1]).toBe(2)
-//   a[2] = 4
-//   expect(a[2]).toBe(4)
+  expect(a[1]).toBe(2)
+  a[2] = 4
+  expect(a[2]).toBe(4)
 
-//   expect(Object.keys(a)).toEqual(["0", "1", "2"])
-// })
+  expect(Object.keys(a)).toEqual(["0", "1", "2"])
+})
 
-// test("test array2", function () {
-//   let a = mobx.observable.array([{a: 1, b: 2 }, 3])
-//   console.log(a)
-//   mobx.autorun(()=> {
-//    a[0]?.a;
-//      console.log('change1')
-//   })
+test("test array2", function () {
+  let a = mobx.observable.array([{a: 1, b: 2 }, 3])
+  const arr = []
+  mobx.autorun(()=> {
+   a[0]?.a;
+   arr.push('change1')
+  })
  
-//   mobx.autorun(()=> {
-//    a[1];
-//      console.log('change2')
-//   })
+  mobx.autorun(()=> {
+   a[1];
+   arr.push('change2')
+  })
  
-//   mobx.autorun(()=> {
-//    a;
-//      console.log('change3')
-//   })
- 
-//   mobx.runInAction(()=> {
-//    a.push(4)
-//   })
- 
-//   mobx.runInAction(()=> {
-//    a.splice(0, 3)
-//   })
+  mobx.autorun(()=> {
+   a;
+   arr.push('change3')
+  })
+  arr.push('start');
+  mobx.runInAction(()=> {
+   a.push(4)
+  })
+  arr.push('end');
+  mobx.runInAction(()=> {
+   a.splice(0, 3)
+  })
+  expect(arr).toEqual(["change1","change2","change3","start","change1","change2","end","change1","change2"])
   
-//  })
+ })
+
+ test("test array3", function () {
+  let a = mobx.observable.array([{a: 1, b: 2 }, 3])
+  const arr = []
+  mobx.autorun(()=> {
+   a[0]?.a;
+     arr.push(1)
+  })
+ 
+  mobx.autorun(()=> {
+    a[1];
+    arr.push(2)
+  })
+ 
+  mobx.autorun(()=> {
+   a[3];
+   arr.push(3)
+  })
+
+  mobx.autorun(() => {
+    a[2]
+    // 理论上应该触发这里
+    arr.push(4)
+  })
+
+  mobx.autorun(() => {
+    // 理论上应该触发这里
+    arr.push(5, a.filter(item => item > 2))
+  })
+
+  mobx.autorun(() => {
+    // 理论上应该触发这里
+    arr.push(_.cloneDeep(a.map((element) => element)), 6)
+  })
+
+
+  mobx.runInAction(()=> {
+    // 这里理论上应该是不变的，不知道mobx底层为什么会触发上述变化。
+    // 猜测用了数组的地方，数组长度发生变化会触发更新，或者直接更新某个下标会更新，
+    // 开始验证
+    // 这里底层应该是先去获取数组长度了。再令数组末尾等于新值。
+    // 所以这里有俩个办法，使得数组长度变化，通知订阅其他下标的autorun
+    // 1，直接重载push函数, 这里push的时候改变了下标2以及length。
+    // 2, 代理，当获取下标属性的时候顺便改变length。
+   a.push(4)
+  })
+
+  expect(arr).toEqual([1,2,3,4,5,[3],[{"a":1,"b":2},3],6,1,2,3,4,5,[3,4],[{"a":1,"b":2},3,4],6])
+  arr.length = 0;
+  mobx.runInAction(() => {
+    // 直接改变某个下标的原始值，所有订阅数组下标的都会触发。。。
+    // 如果下标是个对象，改变对象的某个属性，只会触发下标本身。
+    a[1] = 2
+  })
+  expect(arr).toEqual([1,2,3,4,5,[4],[{"a":1,"b":2},2,4],6])
+  arr.length = 0;
+  mobx.runInAction(() => {
+    a[0].a = 2
+  })
+  expect(arr).toEqual([1,[{"a":2,"b":2},2,4],6])  
+ })
+
+
+ test("test array4", function () {
+  let a = mobx.observable.array([{a: 1, b: 2 }, 3])
+  const arr = []
+  mobx.autorun(()=> {
+   a[0]?.a;
+     arr.push(1)
+  })
+ 
+  mobx.autorun(()=> {
+    a[1];
+    arr.push(2)
+  })
+ 
+  mobx.autorun(()=> {
+   a[3];
+   arr.push(3)
+  })
+
+  mobx.autorun(() => {
+    a[2]
+    // 理论上应该触发这里
+    arr.push(4)
+  })
+
+  mobx.autorun(() => {
+    // 理论上应该触发这里
+    arr.push(5, a.filter(item => item > 2))
+  })
+
+  mobx.autorun(() => {
+    // 理论上应该触发这里
+    arr.push([...(a.map((element) => element))], 6)
+  })
+
+
+  mobx.runInAction(()=> {
+    // 这里理论上应该是不变的，不知道mobx底层为什么会触发上述变化。
+    // 猜测用了数组的地方，数组长度发生变化会触发更新，或者直接更新某个下标会更新，
+    // 开始验证
+    // 这里底层应该是先去获取数组长度了。再令数组末尾等于新值。
+    // 所以这里有俩个办法，使得数组长度变化，通知订阅其他下标的autorun
+    // 1，直接重载push函数, 这里push的时候改变了下标2以及length。
+    // 2, 代理，当获取下标属性的时候顺便改变length。
+   a.push(4)
+  })
+
+  expect(arr).toEqual([1,2,3,4,5,[3],[{"a":1,"b":2},3],6,1,2,3,4,5,[3,4],[{"a":1,"b":2},3,4],6])
+  arr.length = 0;
+  mobx.runInAction(() => {
+    // 直接改变某个下标的原始值，所有订阅数组下标的都会触发。。。
+    // 如果下标是个对象，改变对象的某个属性，只会触发下标本身。
+    a[1] = 2
+  })
+  expect(arr).toEqual([1,2,3,4,5,[4],[{"a":1,"b":2},2,4],6])
+  arr.length = 0;
+  mobx.runInAction(() => {
+    a[0].a = 2
+  })
+  expect(arr).toEqual([1])  
+ })
  
 
 let topTestCase = false;
